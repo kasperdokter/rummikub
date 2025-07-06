@@ -1,13 +1,19 @@
 from dataclasses import dataclass, field
 
-from rummikub.tile import Tile, Location
+from rummikub.tile import Tile
 
 
 @dataclass
 class GameState:
-    tiles: list[Tile] = field(default_factory=list)
+    table: list[Tile] = field(default_factory=list)
+    board: list[Tile] = field(default_factory=list)
 
-    def __str__(self):
-        table = ' '.join(str(t) for t in self.tiles if t.location == Location.TABLE)
-        board = ' '.join(str(t) for t in self.tiles if t.location == Location.BOARD)
+    @property
+    def tiles(self) -> list[Tile]:
+        """Combine tiles from the table and board."""
+        return self.table + self.board
+
+    def __repr__(self) -> str:
+        table = " ".join(str(t) for t in self.table)
+        board = " ".join(str(t) for t in self.board)
         return f"Tafel: {table}\nBordje: {board}"

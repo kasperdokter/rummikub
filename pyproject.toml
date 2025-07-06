@@ -6,14 +6,60 @@ authors = ["Kasper Dokter <info@alefka.nl>"]
 readme = "README.md"
 packages = [{include = "rummikub", from = "src"}]
 
+[tool.poetry.scripts]
+rummikub = "src.rummikub.main:main"
+
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "3.12.10"
 ortools = "^9.14.6206"
 networkx = "^3.5"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0.0"
+black = "^25.1.0"
+mypy = "^1.16.1"
+ruff = "^0.12.2"
+pre-commit = "^4.2.0"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+log_cli = false
+log_cli_level = "INFO"
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.nox
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.mypy]
+python_version = "3.12"
+warn_unused_configs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+mypy_path = "src"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+# Enable Ruff's import sorting
+[tool.ruff.lint]
+select = ["E", "F", "I"]  # E = pycodestyle, F = pyflakes, I = isort rules
