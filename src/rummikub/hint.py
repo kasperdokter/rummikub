@@ -55,10 +55,14 @@ def all_edges(state: GameState) -> Iterable[Edge]:
                 yield Edge(t1, t2, EdgeType.SAME_NUMBER)
 
 
-def adjacent_edges(tile: UniqueTile, state: GameState) -> Iterable[Edge]:
+def adjacent_edges(
+    tile: UniqueTile, state: GameState, side: str | None = None
+) -> Iterable[Edge]:
     """Get all edges adjacent to a tile."""
     for e in all_edges(state):
-        if e.source == tile or e.target == tile:
+        if side in ("out", None) and e.source == tile:
+            yield e
+        if side in ("in", None) and e.target == tile:
             yield e
 
 
@@ -101,10 +105,9 @@ def build_model(
 
     for tile in tiles:
 
-        # Every tile has at least one edge of each type
-        model.add(sum(v(e) for e in adjacent_edges(tile, state)) <= 2)
+        model.add(sum(v(e) for e in adjacent_edges(tile, state, side="in")) <= 1)
+        model.add(sum(v(e) for e in adjacent_edges(tile, state, side="out")) <= 1)
 
-        # Maximize the number of tiles played
         objective.append(v(tile, IN_SAME_NUMBER_SEQ))
         objective.append(v(tile, IN_SAME_COLOR_SEQ))
 
@@ -166,7 +169,7 @@ def get_playable_tiles(
         if first_turn or tile[0] >= len(state.table):
             if val(tile, IN_SAME_COLOR_SEQ) or val(tile, IN_SAME_NUMBER_SEQ):
                 playable.append(tile[1])
-                logger.info(tile)
+                logger.debug(tile)
 
     return playable
 
@@ -185,7 +188,7 @@ def get_sequences(
     for e in all_edges(state):
         if val(e):
             graph.add_edge(e.source, e.target)
-            logger.info(e)
+            logger.debug(e)
 
     # The sequences are the connected components of the graph
     sequences: list[list[Tile]] = []
@@ -198,18 +201,23 @@ def get_sequences(
     return sequences
 
 
+def total(tiles: Iterable[Tile]) -> int:
+    return sum(tile.number for tile in tiles if not tile.is_joker)
+
+
 def get_hint(state: GameState, first_turn: bool = False) -> Hint:
+    logger.debug(f"Getting hint for state: {state}, first_turn={first_turn}")
     model, variables = build_model(state, first_turn)
 
     solver = cp_model.CpSolver()
     status = solver.Solve(model)
-    logger.info(f"Solver status: {solver.StatusName(status)}")
+    logger.debug(f"Solver status: {solver.StatusName(status)}")
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        # for v, ivar in variables.items():
-        #     logger.info(f'{v}: {solver.Value(ivar)}')
-        return Hint(
-            playable=get_playable_tiles(state, variables, solver, first_turn),
-            sequences=get_sequences(state, variables, solver),
-        )
+        playable = get_playable_tiles(state, variables, solver, first_turn)
+        if not first_turn or total(playable) >= 30:
+            return Hint(
+                playable=get_playable_tiles(state, variables, solver, first_turn),
+                sequences=get_sequences(state, variables, solver),
+            )
 
     return Hint(playable=[], sequences=[])

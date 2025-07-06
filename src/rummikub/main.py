@@ -43,25 +43,25 @@ def main() -> None:
                         print("Je moet kopen.")
                 elif args[0] == "leg":
                     for tile_str in args[1:]:
-                        tile = Tile.from_string(tile_str)
-                        state.table.append(tile)
+                        for tile in Tile.parse(tile_str):
+                            state.table.append(tile)
                 elif args[0] == "koop":
                     for tile_str in args[1:]:
-                        tile = Tile.from_string(tile_str)
-                        state.board.append(tile)
+                        for tile in Tile.parse(tile_str):
+                            state.board.append(tile)
                 elif args[0] == "rt":
                     for tile_str in args[1:]:
-                        tile = Tile.from_string(tile_str)
-                        state.table.remove(tile)
+                        for tile in Tile.parse(tile_str):
+                            state.table.remove(tile)
                 elif args[0] == "rb":
                     for tile_str in args[1:]:
-                        tile = Tile.from_string(tile_str)
-                        state.board.remove(tile)
+                        for tile in Tile.parse(tile_str):
+                            state.board.remove(tile)
                 elif args[0] == "speel":
                     for tile_str in args[1:]:
-                        tile = Tile.from_string(tile_str)
-                        state.board.remove(tile)
-                        state.table.append(tile)
+                        for tile in Tile.parse(tile_str):
+                            state.board.remove(tile)
+                            state.table.append(tile)
                 else:
                     print("Ongeldige invoer. Probeer het opnieuw.")
                 break

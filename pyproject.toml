@@ -27,7 +27,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 log_cli = false
-log_cli_level = "INFO"
+log_cli_level = "DEBUG"
 
 [tool.black]
 line-length = 88

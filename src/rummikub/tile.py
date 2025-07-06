@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Iterable
 
 
 @dataclass(frozen=True)
@@ -25,24 +26,39 @@ class Tile:
         return f"\033[32m{self.number}\033[0m"
 
     @classmethod
-    def from_string(cls, tile_str: str) -> "Tile":
+    def parse(cls, tile_str: str) -> Iterable["Tile"]:
         """Parse a tile from string format like 'r5' or 'b12'"""
         if tile_str == "?":
-            return cls(color="r", number=0, is_joker=True)
-
-        if len(tile_str) < 2:
-            raise ValueError(f"Ongeldige tegel: {tile_str}")
-
-        color_char = tile_str[0]
-        number_str = tile_str[1:]
+            yield cls(color="r", number=0, is_joker=True)
+            return
 
         try:
-            assert (
-                color_char in "rbgz"
-            ), "Kleur moet rood (r), blauw (b), groen (g), of zwart (z) zijn."
-            number = int(number_str)
-            assert 1 <= number <= 13, "Nummer moet tussen 1 en 13 liggen."
-        except (ValueError, IndexError, AssertionError):
-            raise ValueError(f"Ongeldige tegel: {tile_str}")
+            first_digit_idx = next(
+                (i for i, c in enumerate(tile_str) if c.isdigit()), None
+            )
+            assert first_digit_idx is not None, "Tegel moet een cijfer bevatten"
 
-        return cls(color=color_char, number=number, is_joker=False)
+            color_chars = tile_str[:first_digit_idx]
+            number_parts = tile_str[first_digit_idx:].split("-")
+
+            assert color_chars, "Tegel moet een kleur bevatten"
+            assert all(c in "rbgz" for c in color_chars), "Ongeldige kleur in tegel"
+            assert len(number_parts) in [1, 2], "Tegels hebben één of twee nummers"
+
+            numbers = [int(part) for part in number_parts]
+
+            assert all(
+                1 <= number <= 13 for number in numbers
+            ), "Nummers moeten tussen 1 en 13 liggen"
+
+            if len(numbers) == 1:
+                numbers.append(numbers[0])
+
+            assert numbers[0] <= numbers[1], "Nummers moeten oplopend zijn"
+
+            for color_char in color_chars:
+                for number in range(numbers[0], numbers[1] + 1):
+                    yield cls(color=color_char, number=number, is_joker=False)
+
+        except (ValueError, AssertionError) as e:
+            raise ValueError(f"Ongeldige tegel {tile_str}: {e}")

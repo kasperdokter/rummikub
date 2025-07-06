@@ -14,6 +14,6 @@ class GameState:
         return self.table + self.board
 
     def __repr__(self) -> str:
-        table = " ".join(str(t) for t in self.table)
-        board = " ".join(str(t) for t in self.board)
-        return f"Tafel: {table}\nBordje: {board}"
+        table = " ".join(str(t) for t in sorted(self.table))
+        board = " ".join(str(t) for t in sorted(self.board))
+        return f"State(table={table}, board={board})"

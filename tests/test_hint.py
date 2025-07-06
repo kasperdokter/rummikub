@@ -7,16 +7,17 @@ from rummikub.tile import Tile
 logger = logging.getLogger(__name__)
 
 
+def get_state(table: str, board: str) -> GameState:
+    """Helper function to create a GameState from table and board strings."""
+    table_tiles = [t for s in table.split() for t in Tile.parse(s)]
+    board_tiles = [t for s in board.split() for t in Tile.parse(s)]
+    return GameState(table=table_tiles, board=board_tiles)
+
+
 def test_simple_hint() -> None:
-    state = GameState(
-        table=[
-            Tile(color="r", number=1, is_joker=False),
-            Tile(color="r", number=2, is_joker=False),
-            Tile(color="r", number=4, is_joker=False),
-        ],
-        board=[
-            Tile(color="r", number=3, is_joker=False),
-        ],
+    state = get_state(
+        table="r1 r2 r4",
+        board="r3",
     )
     hint = get_hint(state)
     logger.info(f"Hint: {hint}")
@@ -25,15 +26,9 @@ def test_simple_hint() -> None:
 
 
 def test_simple_hint2() -> None:
-    state = GameState(
-        table=[
-            Tile(color="g", number=7, is_joker=False),
-            Tile(color="b", number=7, is_joker=False),
-        ],
-        board=[
-            Tile(color="z", number=7, is_joker=False),
-            Tile(color="r", number=7, is_joker=False),
-        ],
+    state = get_state(
+        table="g7 b7",
+        board="z7 r7",
     )
     hint = get_hint(state)
     logger.info(f"Hint: {hint}")
@@ -43,15 +38,9 @@ def test_simple_hint2() -> None:
 
 
 def test_joker() -> None:
-    state = GameState(
-        table=[
-            Tile(color="r", number=1, is_joker=False),
-            Tile(color="r", number=2, is_joker=False),
-            Tile(color="r", number=4, is_joker=False),
-        ],
-        board=[
-            Tile(color="z", number=0, is_joker=True),
-        ],
+    state = get_state(
+        table="r1 r2 r4",
+        board="?",
     )
     hint = get_hint(state)
     logger.info(f"Hint: {hint}")
@@ -59,36 +48,32 @@ def test_joker() -> None:
     assert hint.sequences == [sorted(state.tiles)]
 
 
-def test_first_turn() -> None:
-    state = GameState(
-        table=[],
-        board=[
-            Tile(color="r", number=1, is_joker=False),
-            Tile(color="r", number=2, is_joker=False),
-            Tile(color="r", number=3, is_joker=False),
-        ],
+def test_first_turn_ok() -> None:
+    state = get_state(
+        table="",
+        board="r9 r10 r11",
     )
     hint = get_hint(state, first_turn=True)
     logger.info(f"Hint: {hint}")
-    assert state.tiles[0] in hint.playable
-    assert state.tiles[1] in hint.playable
-    assert state.tiles[2] in hint.playable
+    assert all(tile in hint.playable for tile in state.tiles)
     assert hint.sequences == [sorted(state.tiles)]
+
+
+def test_first_turn_insufficient() -> None:
+    state = get_state(
+        table="",
+        board="r1 r2 r3",
+    )
+    hint = get_hint(state, first_turn=True)
+    logger.info(f"Hint: {hint}")
+    assert not hint.playable
 
 
 def test_duplicates() -> None:
-    state = GameState(
-        table=[
-            Tile(color="r", number=1, is_joker=False),
-            Tile(color="r", number=2, is_joker=False),
-            Tile(color="r", number=3, is_joker=False),
-        ],
-        board=[
-            Tile(color="r", number=2, is_joker=False),
-        ],
+    state = get_state(
+        table="r1 r2 r3",
+        board="r2",
     )
     hint = get_hint(state)
     logger.info(f"Hint: {hint}")
-    assert state.tiles[3] in hint.playable
-    assert state.tiles[4] in hint.playable
-    assert hint.sequences == [sorted(state.tiles)]
+    assert not hint.playable
