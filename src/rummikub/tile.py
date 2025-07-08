@@ -26,10 +26,15 @@ class Tile:
         return f"\033[32m{self.number}\033[0m"
 
     @classmethod
+    def parse_all(cls, tile_str: str) -> Iterable["Tile"]:
+        for tile in tile_str.split():
+            yield from Tile.parse(tile)
+
+    @classmethod
     def parse(cls, tile_str: str) -> Iterable["Tile"]:
         """Parse a tile from string format like 'r5' or 'b12'"""
         if tile_str == "?":
-            yield cls(color="r", number=0, is_joker=True)
+            yield cls(color="a", number=0, is_joker=True)
             return
 
         try:

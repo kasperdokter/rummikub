@@ -2,68 +2,94 @@ from rummikub.hint import get_hint
 from rummikub.state import GameState
 from rummikub.tile import Tile
 
+PLAY = "p"
+PUT_TABLE = "t"
+TAKE_TABLE = "rt"
+TAKE_BOARD = "rb"
+RESET = "z"
+EXIT_GAME = "q"
+
 
 def main() -> None:
     state = GameState()
+    show_hint = True
+    hinted = []
     print()
     print("Welkom bij Rummikub!")
     print()
-    print("Je kunt tegels plaatsen in de vorm van 'r5' (rood 5) of 'b12' (blauw 12).")
-    print(
-        "Typ 'speel tegel1 tegel2 ...' "
-        "om tegels van je bordje op de tafel te plaatsen."
-    )
-    print("Typ 'leg tegel1 tegel2 ...' " "om tegels op de tafel te plaatsen.")
-    print("Typ 'koop tegel1 tegel2 ...' om tegels op je bordje te plaatsen.")
-    print("Typ 'vantafel tegel1 tegel2 ...' om tegels van de tafel te halen.")
-    print("Typ 'vanbord tegel1 tegel2 ...' om tegels van je bordje te halen.")
-    print("Typ 'hint' om een suggestie te krijgen.")
-    print("Typ 'stop' om te stoppen.")
+    print("Typ de volgende commando's om te spelen:")
+    print(f" - \033[93m{PLAY:<8}\033[0m Verplaats tegels van je bordje naar de tafel.")
+    print(f" - \033[93m{PUT_TABLE:<8}\033[0m Plaats tegels op de tafel.")
+    print(f" - \033[93m{TAKE_TABLE:<8}\033[0m Verwijder tegels van de tafel.")
+    print(f" - \033[93m{TAKE_BOARD:<8}\033[0m Verwijder tegels van je bordje.")
+    print(f" - \033[93m{RESET:<8}\033[0m Reset de tafel en het bordje.")
+    print(f" - \033[93m{EXIT_GAME:<8}\033[0m Stop het spel.")
 
     while True:
+
         print()
-        print(state)
+        print("Tafel :", state.table_str())
+        print("Bord  :", state.board_str())
         print()
+
+        if show_hint:
+            hint = get_hint(state)
+            if hint.playable:
+                hinted = hint.playable
+                playable_tiles = " ".join(str(t) for t in sorted(hint.playable))
+                print(f"\tJe kan de volgende tegels spelen: {playable_tiles}")
+                print("\tMaak de volgende rijtjes:")
+                sorted_seq = sorted(
+                    hint.sequences, key=lambda s: (s[0].number, s[0].color)
+                )
+                for i, seq in enumerate(sorted_seq):
+                    print(f"\t  {i + 1}) {' '.join(str(tile) for tile in seq)}")
+            else:
+                print("\tJe moet kopen.")
+            print()
+
+        show_hint = True
+
         while True:
             try:
                 response = input(">>> ").strip()
                 args = response.lower().split()
                 assert args, "Geen commando"
-                if args[0] == "stop":
+                if args[0] == EXIT_GAME:
                     return
-                elif args[0] == "hint":
-                    hint = get_hint(state)
-                    if hint.playable:
-                        playable_tiles = " ".join(str(tile) for tile in hint.playable)
-                        print(f"Je kan de volgende tegels spelen: {playable_tiles}")
-                        print("Maak de volgende rijtjes:")
-                        for i, seq in enumerate(hint.sequences):
-                            print(i + 1, " ".join(str(tile) for tile in seq))
-                    else:
-                        print("Je moet kopen.")
-                elif args[0] == "leg":
+                elif args[0] == PUT_TABLE:
                     for tile_str in args[1:]:
                         for tile in Tile.parse(tile_str):
                             state.table.append(tile)
-                elif args[0] == "koop":
-                    for tile_str in args[1:]:
-                        for tile in Tile.parse(tile_str):
-                            state.board.append(tile)
-                elif args[0] == "rt":
+                elif args[0] == TAKE_TABLE:
                     for tile_str in args[1:]:
                         for tile in Tile.parse(tile_str):
                             state.table.remove(tile)
-                elif args[0] == "rb":
+                elif args[0] == TAKE_BOARD:
                     for tile_str in args[1:]:
                         for tile in Tile.parse(tile_str):
                             state.board.remove(tile)
-                elif args[0] == "speel":
-                    for tile_str in args[1:]:
-                        for tile in Tile.parse(tile_str):
+                elif args[0] == PLAY:
+                    show_hint = False
+                    state.first_turn = False
+                    if len(args) == 1:
+                        for tile in hinted:
                             state.board.remove(tile)
                             state.table.append(tile)
+                    else:
+                        for tile_str in args[1:]:
+                            for tile in Tile.parse(tile_str):
+                                state.board.remove(tile)
+                                state.table.append(tile)
+                elif args[0] == RESET:
+                    state.table.clear()
+                    state.board.clear()
+                    state.first_turn = True
+                    hinted = []
                 else:
-                    print("Ongeldige invoer. Probeer het opnieuw.")
+                    for tile_str in args:
+                        for tile in Tile.parse(tile_str):
+                            state.board.append(tile)
                 break
             except (ValueError, AssertionError) as e:
                 print(f"Er is iets misgegaan ({e}). Probeer het opnieuw.")

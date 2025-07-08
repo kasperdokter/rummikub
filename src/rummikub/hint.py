@@ -29,125 +29,159 @@ IN_SAME_COLOR_SEQ = "in_same_color_sequence"
 
 def varname(obj: object, label: str = "") -> str:
     """Generate a variable name based on the object and label."""
-    return f"{obj}_{label}" if label else repr(obj)
+    return f"{repr(obj)}_{label}" if label else repr(obj)
 
 
 UniqueTile = tuple[int, Tile]
 
 
-@dataclass
+@dataclass(frozen=True)
 class Edge:
     source: UniqueTile
     target: UniqueTile
-    type: EdgeType
+
+    def __str__(self) -> str:
+        return f"{self.source[1]} -> {self.target[1]}"
+
+    def __repr__(self) -> str:
+        return f"{self.source} -> {self.target}"
 
 
-def all_edges(state: GameState) -> Iterable[Edge]:
-    """Generate all edges based on the tiles in the game state."""
-    for t1 in enumerate(state.tiles):
-        for t2 in enumerate(state.tiles):
-            if t1[1].is_joker or t2[1].is_joker:
-                yield Edge(t1, t2, EdgeType.SAME_COLOR)
-                yield Edge(t1, t2, EdgeType.SAME_NUMBER)
-            if t1[1].color == t2[1].color and t1[1].number + 1 == t2[1].number:
-                yield Edge(t1, t2, EdgeType.SAME_COLOR)
-            if t1[1].number == t2[1].number and t1[1].color < t2[1].color:
-                yield Edge(t1, t2, EdgeType.SAME_NUMBER)
+def valid_edge_colors(t1: UniqueTile, t2: UniqueTile) -> set[int]:
+    """Check if an edge between two tiles is valid."""
+    if t1 == t2:
+        return set()
+    if t1[1].is_joker and t2[1].is_joker:
+        return set(range(1, 15))
+    if t1[1].is_joker and not t2[1].is_joker:
+        return {t2[1].number, 14}
+    if not t1[1].is_joker and t2[1].is_joker:
+        return {t1[1].number, 14}
+    if t1[1].color == t2[1].color and t1[1].number + 1 == t2[1].number:
+        return {14}
+    if t1[1].number == t2[1].number and t1[1].color < t2[1].color:
+        return {t1[1].number}
+    return set()
 
 
-def adjacent_edges(
-    tile: UniqueTile, state: GameState, side: str | None = None
-) -> Iterable[Edge]:
-    """Get all edges adjacent to a tile."""
-    for e in all_edges(state):
-        if side in ("out", None) and e.source == tile:
-            yield e
-        if side in ("in", None) and e.target == tile:
-            yield e
+def valid_sequence_colors(
+    t1: UniqueTile, t2: UniqueTile, t3: UniqueTile
+) -> Iterable[int]:
+    colors = valid_edge_colors(t1, t2) & valid_edge_colors(t2, t3)
+    for c in colors:
+        if not t1[1].is_joker:
+            if not t3[1].is_joker:
+                if c == 14:
+                    if t1[1].number + 2 != t3[1].number:
+                        continue
+                    if t1[1].color != t3[1].color:
+                        continue
+                else:
+                    if t1[1].number != t3[1].number:
+                        continue
+                    if t1[1].color >= t3[1].color:
+                        continue
+        yield c
 
 
-def adjacent_edges_of_same_type(edge: Edge, state: GameState) -> Iterable[Edge]:
-    """Get all edges of the same type adjacent to a given edge."""
-    for e in all_edges(state):
-        if e.type == edge.type:
-            if e.source == edge.target and e.target != edge.source:
-                yield e
-            if e.source != edge.target and e.target == edge.source:
-                yield e
+def is_adjacent(edge1: Edge, edge2: Edge) -> bool:
+    """Check if two edges are adjacent."""
+    return edge1.target == edge2.source or edge1.source == edge2.target
 
 
 def build_model(
-    state: GameState, first_turn: bool
+    state: GameState,
 ) -> tuple[cp_model.CpModel, dict[str, cp_model.IntVar]]:
     model = cp_model.CpModel()
     variables: dict[str, cp_model.IntVar] = {}
 
-    def v(obj: object, label: str = "") -> cp_model.IntVar:
+    def v(obj: object, label: str = "", lb: int = 0, ub: int = 14) -> cp_model.IntVar:
         v_name = varname(obj, label)
         v_obj = variables.get(v_name)
         if v_obj is None:
-            v_obj = model.new_bool_var(v_name)
+            v_obj = model.new_int_var(lb, ub, v_name)
             variables[v_name] = v_obj
         return v_obj
 
-    objective: list[cp_model.IntVar] = []
+    tiles = list(enumerate(state.tiles))
 
-    # Every edge had adjacent edge on source or target tile of same edgetype
-    for e1 in all_edges(state):
-        model.add_at_least_one(
-            v(e2) for e2 in adjacent_edges_of_same_type(e1, state)
-        ).only_enforce_if(v(e1))
+    edges = [Edge(t1, t2) for t1 in tiles for t2 in tiles if valid_edge_colors(t1, t2)]
 
-    if first_turn:
-        tiles = enumerate(state.board)
-    else:
-        tiles = enumerate(state.tiles)
+    logger.debug("Graph edges:")
+    for e in edges:
+        logger.debug(e)
 
+    # Ensure sequences are of length at least 3
+    for e in edges:
+        model.add(v(e) <= sum(v(adj) for adj in edges if is_adjacent(e, adj)))
+
+    # Ensure the graph is valid at every tile
     for tile in tiles:
 
-        model.add(sum(v(e) for e in adjacent_edges(tile, state, side="in")) <= 1)
-        model.add(sum(v(e) for e in adjacent_edges(tile, state, side="out")) <= 1)
+        logger.debug(f"Validity at tile {tile}")
+        adjacent_edges = [e for e in edges if e.source == tile or e.target == tile]
+        logger.debug(adjacent_edges)
+        if not adjacent_edges:
+            continue
 
-        objective.append(v(tile, IN_SAME_NUMBER_SEQ))
-        objective.append(v(tile, IN_SAME_COLOR_SEQ))
+        assignments = []
 
-        # Every tile is connected to at most 1 type of edge
-        # and tiles on the table must be played
-        if not first_turn and tile[0] < len(state.table):
-            model.add_exactly_one(
-                v(tile, IN_SAME_NUMBER_SEQ), v(tile, IN_SAME_COLOR_SEQ)
-            )
-        else:
-            model.add_at_most_one(
-                v(tile, IN_SAME_NUMBER_SEQ), v(tile, IN_SAME_COLOR_SEQ)
-            )
+        # Tiles on the board may not be in a sequence
+        if tile[0] >= state.number_of_tile_on_table:
+            a = [0 for _ in adjacent_edges]
+            assignments.append(a)
+            logger.debug(f"{a} {tile} not played")
 
-        for e in adjacent_edges(tile, state):
-            if e.type == EdgeType.SAME_COLOR:
-                model.add_implication(v(e), v(tile, IN_SAME_COLOR_SEQ))
-                model.add_implication(v(tile, IN_SAME_NUMBER_SEQ), v(e).Not())
-            if e.type == EdgeType.SAME_NUMBER:
-                model.add_implication(v(e), v(tile, IN_SAME_NUMBER_SEQ))
-                model.add_implication(v(tile, IN_SAME_COLOR_SEQ), v(e).Not())
+        # Case 1: tile is in the middle of a sequence
+        for left in tiles:
+            for right in tiles:
+                for c in valid_sequence_colors(left, tile, right):
+                    a = [
+                        c if e == Edge(left, tile) or e == Edge(tile, right) else 0
+                        for e in adjacent_edges
+                    ]
+                    assignments.append(a)
+                    logger.debug(f"{a} {left[1]} -> {tile[1]} -> {right[1]}")
 
-        model.add(
-            v(tile, IN_SAME_NUMBER_SEQ)
-            <= sum(
-                v(e)
-                for e in adjacent_edges(tile, state)
-                if e.type == EdgeType.SAME_NUMBER
-            )
+        # Case 2: tile is the start of a sequence
+        for left in tiles:
+            for c in valid_edge_colors(left, tile):
+                a = [c if e == Edge(left, tile) else 0 for e in adjacent_edges]
+                assignments.append(a)
+                logger.debug(f"{a} {left[1]} -> {tile[1]}")
+
+        # Case 3: tile is the end of a sequence
+        for right in tiles:
+            for c in valid_edge_colors(tile, right):
+                a = [c if e == Edge(tile, right) else 0 for e in adjacent_edges]
+                assignments.append(a)
+                logger.debug(f"{a} {tile[1]} -> {right[1]}")
+
+        model.add_allowed_assignments(
+            [v(e) for e in adjacent_edges],
+            assignments,
         )
-        model.add(
-            v(tile, IN_SAME_COLOR_SEQ)
-            <= sum(
-                v(e)
-                for e in adjacent_edges(tile, state)
-                if e.type == EdgeType.SAME_COLOR
-            )
-        )
 
-    model.maximize(sum(objective))
+    # B = len(edges) + 1
+
+    objective = 0
+
+    # Maximize the number of tiles played
+    for tile in tiles:
+        if tile[0] >= state.number_of_tile_on_table:
+            obj_var = v(tile, label="obj", lb=0, ub=1)
+            objective += obj_var
+            model.add(
+                obj_var
+                <= sum(v(e) for e in edges if e.source == tile or e.target == tile)
+            )
+
+    # Then, make as many connections as possible
+    # for e in edges:
+    #     objective += v(e)
+
+    logger.debug(f"objective: {objective}")
+    model.maximize(objective)
 
     return model, variables
 
@@ -156,7 +190,6 @@ def get_playable_tiles(
     state: GameState,
     variables: dict[str, cp_model.IntVar],
     solver: cp_model.CpSolver,
-    first_turn: bool,
 ) -> list[Tile]:
 
     def val(obj: object, label: str = "") -> bool:
@@ -164,18 +197,22 @@ def get_playable_tiles(
         ivar = variables.get(varname(obj, label))
         return solver.Value(ivar) > 0.5 if ivar is not None else False
 
-    playable: list[Tile] = []
-    for tile in enumerate(state.tiles):
-        if first_turn or tile[0] >= len(state.table):
-            if val(tile, IN_SAME_COLOR_SEQ) or val(tile, IN_SAME_NUMBER_SEQ):
-                playable.append(tile[1])
-                logger.debug(tile)
+    # Get all edges with an edge
+    used_tiles: set[UniqueTile] = set()
+    for t1 in enumerate(state.tiles):
+        for t2 in enumerate(state.tiles):
+            edge = Edge(t1, t2)
+            if val(edge):
+                used_tiles.add(t1)
+                used_tiles.add(t2)
 
-    return playable
+    return sorted(t[1] for t in used_tiles if t[0] >= state.number_of_tile_on_table)
 
 
 def get_sequences(
-    state: GameState, variables: dict[str, cp_model.IntVar], solver: cp_model.CpSolver
+    state: GameState,
+    variables: dict[str, cp_model.IntVar],
+    solver: cp_model.CpSolver,
 ) -> list[list[Tile]]:
 
     def val(obj: object, label: str = "") -> bool:
@@ -185,10 +222,11 @@ def get_sequences(
 
     # Build the graph from the solution
     graph = nx.Graph()
-    for e in all_edges(state):
-        if val(e):
-            graph.add_edge(e.source, e.target)
-            logger.debug(e)
+    for t1 in enumerate(state.tiles):
+        for t2 in enumerate(state.tiles):
+            e = Edge(t1, t2)
+            if val(e):
+                graph.add_edge(e.source, e.target)
 
     # The sequences are the connected components of the graph
     sequences: list[list[Tile]] = []
@@ -205,18 +243,24 @@ def total(tiles: Iterable[Tile]) -> int:
     return sum(tile.number for tile in tiles if not tile.is_joker)
 
 
-def get_hint(state: GameState, first_turn: bool = False) -> Hint:
-    logger.debug(f"Getting hint for state: {state}, first_turn={first_turn}")
-    model, variables = build_model(state, first_turn)
+def get_hint(state: GameState) -> Hint:
+    logger.debug(f"Getting hint for state: {state}")
+    model, variables = build_model(state)
 
     solver = cp_model.CpSolver()
     status = solver.Solve(model)
     logger.debug(f"Solver status: {solver.StatusName(status)}")
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        playable = get_playable_tiles(state, variables, solver, first_turn)
-        if not first_turn or total(playable) >= 30:
+
+        logger.debug("Solution:")
+        for v_name, v_obj in variables.items():
+            logger.debug(f"{v_name}: {solver.Value(v_obj)}")
+
+        playable = get_playable_tiles(state, variables, solver)
+
+        if not state.first_turn or total(playable) >= 30:
             return Hint(
-                playable=get_playable_tiles(state, variables, solver, first_turn),
+                playable=playable,
                 sequences=get_sequences(state, variables, solver),
             )
 
