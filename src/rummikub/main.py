@@ -12,7 +12,7 @@ EXIT_GAME = "q"
 
 def main() -> None:
     state = GameState()
-    show_hint = True
+    must_buy = False
     hinted = []
     print()
     print("Welkom bij Rummikub!")
@@ -32,7 +32,7 @@ def main() -> None:
         print("Bord  :", state.board_str())
         print()
 
-        if show_hint:
+        if must_buy:
             hint = get_hint(state)
             if hint.playable:
                 hinted = hint.playable
@@ -46,9 +46,11 @@ def main() -> None:
                     print(f"\t  {i + 1}) {' '.join(str(tile) for tile in seq)}")
             else:
                 print("\tJe moet kopen.")
-            print()
+        else:
+            print("\tJe moet kopen.")
+        print()
 
-        show_hint = True
+        must_buy = False
 
         while True:
             try:
@@ -70,7 +72,7 @@ def main() -> None:
                         for tile in Tile.parse(tile_str):
                             state.board.remove(tile)
                 elif args[0] == PLAY:
-                    show_hint = False
+                    must_buy = True
                     state.first_turn = False
                     if len(args) == 1:
                         for tile in hinted:
